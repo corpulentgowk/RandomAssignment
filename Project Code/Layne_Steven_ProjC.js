@@ -19,10 +19,10 @@ var VSHADER_SOURCE =
 ' gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
 ' v_Position = vec3(u_ModelMatrix * a_Position);\n' +
 ' v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
-' v_Kd = vec3(u_Kd);\n' +
-' v_Ke = vec3(u_Ke);\n' +
-' v_Ks = vec3(u_Ks);\n' +
-' v_Ka = vec3(u_Ka);\n' +
+' v_Kd = u_Kd;\n' +
+' v_Ke = u_Ke;\n' +
+' v_Ks = u_Ks;\n' +
+' v_Ka = u_Ka;\n' +
 '}\n';
 
 // Fragment shader program
