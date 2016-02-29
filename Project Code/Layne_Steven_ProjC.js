@@ -471,7 +471,7 @@ function createT(){
     ];
   }
 
-function createCylin
+function createCylinder()
 {
   var CYL_DIV = 36;
   var i, ai, si, ci;
@@ -981,7 +981,7 @@ function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatri
 
 
 //Tree Building
-  var matIndex = 1;
+  var matIndex = 4;
   Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
   Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
   Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
