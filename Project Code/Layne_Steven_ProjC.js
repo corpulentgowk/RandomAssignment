@@ -35,7 +35,7 @@ var FSHADER_SOURCE =
 'uniform vec3 u_light1Amb;\n' +
 'uniform vec3 u_light1Diff;\n' +
 'uniform vec3 u_light1Spec;\n' +
-'uniform vec3 u_EyePos;\n' +
+'uniform vec3 u_eyePosWorld;\n' +
 
 'uniform vec3 u_light0Diff;\n' +
 'uniform vec3 u_light0Spec;\n' +
@@ -55,7 +55,8 @@ var FSHADER_SOURCE =
 
 'void main() {\n' +
 ' vec3 normal = normalize(v_Normal);\n' +
-' vec3 eyeDirection = normalize(u_EyePos - v_Position);\n vec3 lightDirection0 = vec3(u_light0Pos - v_Position);\n' +
+' vec3 eyeDirection = normalize(u_eyePosWorld - v_Position);\n' +
+' vec3 lightDirection0 = vec3(u_light0Pos - v_Position);\n' +
 ' float r0 = sqrt(pow(lightDirection0.x, 2.0) + pow(lightDirection0.y, 2.0) + pow(lightDirection0.z, 2.0));\n' +
 ' float att0 = 1.0/(1.0+0.0*r0+0.0*pow(r0, 2.0));\n' +
 ' lightDirection0 = normalize(lightDirection0);\n' +
@@ -73,7 +74,7 @@ var FSHADER_SOURCE =
 ' vec3 ambient = v_Ka*(u_light0Amb + u_light1Amb);\n' +
 ' vec3 diffuse = v_Kd*(att0*(max(0.0, nDotL0)*u_light0Diff)+att1*(max(0.0, nDotL1)*u_light1Diff));\n' +
 ' vec3 specular = v_Ks*(att0*u_light0Spec*pow(max(0.0, eDotR0), float(u_Kshiny)) + att1*u_light1Spec*pow(max(0.0, eDotR1), float(u_Kshiny)));\n' +
-'   gl_FragColor = vec4(1.0*emissive + 1.0*ambient + 1.0*diffuse + 1.0*specular, 1.0);\n' +
+'   gl_FragColor = vec4(emissive + ambient + diffuse + specular, 1.0);\n' +
 '}\n';
 
 var floatsPerVertex = 6;
@@ -95,7 +96,7 @@ var sepPos, sepNorm, sepStart;
 var cubePos, cubeNorm, cubeInd, cubeStart;
 var conePos, coneNorm, coneInd, coneStart;
 
-var u_EyePos;
+var u_eyePosWorld;
 
 var light0Pos, light0Amb, light0Diff, light0Spec;
 var light1Pos, light1Amb, light1Diff, light1Spec;
@@ -203,10 +204,10 @@ function main()
     }
     
     //Eye pos
-    u_EyePos = gl.getUniformLocation(gl.program, 'u_EyePos');
+    u_eyePosWorld = gl.getUniformLocation(gl.program, 'u_eyePosWorld');
     
-    if (!u_EyePos) {
-      console.log('Failed to get u_EyePos storage location');
+    if (!u_eyePosWorld) {
+      console.log('Failed to get u_eyePosWorld storage location');
       return;
     }
     
@@ -363,8 +364,114 @@ function createSphere()
     }
   }
 }
+function createT(){
+  tpos=[
+//Top Side
+    0, .5,-.5,  //B
+    .5,.5,-.5,   //C
+    .25, 1, -.25,  //Top Point
 
-function createCylinder()
+     0, .5,-.5,  //B
+     0, .5, 0 ,   //H
+     .25, 1, -.25, //Top Point
+
+     0, .5, 0 , //H
+     .5, .5, 0 ,  //E
+     .25, 1, -.25,  //Top Point
+
+    .5,.5,-.5,  //C
+    .5, .5, 0 , //E
+    .25, 1, -.25,  //Top Point
+  //Bottom Side
+      0, 0,-.5, //A
+    .5,0,-.5,  //D
+    .25, -.5, -.25,  //Bottom Point
+
+     0, 0,-.5,  //A
+     0, 0, 0 ,  //G
+     .25, -.5, -.25,  //Bottom Point
+
+     0, 0, 0 , //G
+     .5, 0, 0 ,  //F
+     .25, -.5, -.25, //Bottom Point
+
+    .5,0,-.5, //D
+    .5, 0, 0 , //F
+    .25, -.5, -.25,  //Bottom Point
+
+    //Front Side
+     .5, .5, 0 ,  //E
+     .5, 0, 0 , //F
+     .25,.25,.5, // Front point
+
+     0, .5, 0 ,  //H
+     .5, .5, 0 ,  //E
+     .25,.25,.5, // Front point
+
+      0, .5, 0 ,  //H
+      0, 0, 0 , //G
+      .25,.25,.5, // Front point
+
+      0, 0, 0 ,  //G
+     .5, 0, 0 , //F
+     .25,.25,.5, // Front point
+
+      //Back Side
+     .5, .5, -.5 , //C
+     .5, 0, -.5 , //D
+     .25,.25,-1, // Front point
+
+     0, .5, -.5 , //B
+     .5, .5, -.5 , //C
+     .25,.25,-1, // Front point
+
+      0, .5, -.5 ,  //B
+      0, 0, -.5 , //A
+      .25,.25,-1, // Front point
+
+      0, 0, -.5 , //A
+     .5, 0, -.5 , //D
+     .25,.25,-1,// Front point
+
+     //Left Side
+
+     0, .5, 0 ,  //H
+    0, .5, -.5 , //B
+    -.5,.25,-.25,  // Left point
+
+    0, .5, -.5 , //B
+     0, 0, -.5 , //A
+     -.5,.25,-.25,// Left point
+
+    0, 0, 0 ,//G
+    0, 0, -.5 , //A
+    -.5,.25,-.25, // Left point
+
+    0, .5, 0 , //H
+    0, 0, 0 , //G
+    -.5,.25,-.25, // Left point
+         
+    //Right Side
+
+    .5, .5, 0 , //H
+    .5, .5, -.5 ,//B
+    1,.25,-.25, // Left point
+
+    .5, .5, -.5 , //B
+    .5, 0, -.5 ,//A
+    1,.25,-.25, // Left point
+
+    .5, 0, 0 , //G
+    .5, 0, -.5 , //A
+    1,.25,-.25, // Left point
+
+    .5, .5, 0 ,//H
+    .5, 0, 0 , //G
+    1,.25,-.25, // Left point
+    ];
+  }
+
+function createCylin
 {
   var CYL_DIV = 36;
   var i, ai, si, ci;
@@ -874,7 +981,7 @@ function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatri
 
 
 //Tree Building
-  var matIndex = 17;
+  var matIndex = 1;
   Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
   Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
   Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
@@ -1104,7 +1211,7 @@ function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMat
     gl.uniform3f(u_light1Diff, light1Diff.x, light1Diff.y, light1Diff.z); 
     gl.uniform3f(u_light1Spec, light1Spec.x, light1Spec.y, light1Spec.z); 
     
-  gl.uniform3f(u_EyePos, g_eyeX, g_eyeY, g_eyeZ);
+  gl.uniform3f(u_eyePosWorld, g_eyeX, g_eyeY, g_eyeZ);
   
   
   projMatrix.setPerspective(40.0, vpAspect, 1, 100);
