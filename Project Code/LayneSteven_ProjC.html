@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Project C!</title>
+
+  </head>
+
+  <body onload="main()"> <!-- ; help() onresize="winResize()" onresize="winResize()" -->
+
+    <canvas id="webgl" width='1280px' height='700px'>
+    Please use a browser that supports "canvas"
+    </canvas>
+
+<table>
+  <p>User Information  <button type="button" onclick="help()"> Help! </button></p>
+  <!--div id='Mouse'> Mouse Drag totals (CVV coords) </div>
+  <button type="button" onClick='clearDrag()'>Clear</button-->
+	<p>Set to Full or Clear</p>
+    <button type="button" onclick="setEmmissive()">Set/Clear Emmissive</button>
+	  <button type="button" onclick="setAmbient()">Set/Clear Ambient</button>
+    <button type="button" onclick="setDiffuse()">Set/Clear Diffuse</button>
+    <button type="button" onclick="setSpecular()">Set/Clear Specular</button>
+
+  <p>Edit RGB</p>
+    <label>Red: </label><input id="redIn"></input><br>
+    <label>Green: </label> <input id="greenIn"></input><br>
+    <label>Blue: </label><input id="blueIn"></input><br>
+    <button type="button" onclick="setRGB()">Set RGB</button>
+    
+    
+  
+
+    <script src="../lib/webgl-utils.js"></script>
+    <script src="../lib/webgl-debug.js"></script>
+    <script src="../lib/cuon-utils.js"></script>
+    <script src="../lib/cuon-matrix-mod.js"></script>
+    <script src="../lib/cuon-matrix.js"></script>
+    <script src="../lib/cuon-matrix-quatN.js"></script>
+	<!--	Finally, load in our own JavaScript program file.
+	-->
+    <script src="Layne_Steven_ProjC.js"></script>
+    <script src="materials_Ayerdi.js">
+    <!--script src="projC.js"></script-->
+
+	<script type="text/javascript">
+	
+	document.onkeypress = function (e) {
+    console.log('noticed keypress');
+      if (e.keyCode == 104) {
+        console.log('got f1');
+        //help();
+    	}
+    	
+  	}
+
+	</script>
+ 
+
+
+  </body>
+</html>
