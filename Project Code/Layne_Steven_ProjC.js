@@ -17,7 +17,7 @@ var VSHADER_SOURCE =
 	//-------------ATTRIBUTES of each vertex, read from our Vertex Buffer Object
   'attribute vec4 a_Position; \n' +		// vertex position (model coord sys)
   'attribute vec4 a_Normal; \n' +			// vertex normal vector (model coord sys)
-
+  'attribute vec4 a_Color; \n' +
 										
 	//-------------UNIFORMS: values set from JavaScript before a drawing command.
 // 	'uniform vec3 u_Kd; \n' +						// Phong diffuse reflectance for the 
@@ -27,7 +27,7 @@ var VSHADER_SOURCE =
   'uniform mat4 u_ProjMatrix;\n' +
   'uniform mat4 u_ModelMatrix; \n' + 		// Model matrix
   'uniform mat4 u_NormalMatrix; \n' +  	// Inverse Transpose of ModelMatrix;
-  																			// (won't distort normal vec directions
+  'uniform float u_State ; \n' +																			// (won't distort normal vec directions
   																			// but it usually WILL change its length)
   
 	//-------------VARYING:Vertex Shader values sent per-pixel to Fragment shader:
@@ -36,10 +36,14 @@ var VSHADER_SOURCE =
 																				// we use 'uniform' values instead)
   'varying vec4 v_Position; \n' +				
   'varying vec3 v_Normal; \n' +					// Why Vec3? its not a point, hence w==0
+  'varying vec4 v_Color; \n' +
+  'varying float v_State; \n' +
 	//-----------------------------------------------------------------------------
   'void main() { \n' +
 		// Compute CVV coordinate values from our given vertex. This 'built-in'
 		// 'varying' value gets interpolated to set screen position for each pixel.
+    'v_State = u_State;\n' +
+    'v_Color = a_Color; \n'+
   '  gl_Position = gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
 		// Calculate the vertex position & normal vec in the WORLD coordinate system
 		// for use as a 'varying' variable: fragment shaders get per-pixel values
@@ -48,7 +52,10 @@ var VSHADER_SOURCE =
 		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
 		// gets interpolated (in world coords) for each pixel's fragment shader.
   '  v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
-	'	 v_Kd = u_MatlSet[0].diff; \n' +		// find per-pixel diffuse reflectance from per-vertex
+	'	 v_Kd = u_MatlSet[0].diff; \n' +
+    'gl_PointSize = 10.0; \n' +
+
+// find per-pixel diffuse reflectance from per-vertex
 													// (no per-pixel Ke,Ka, or Ks, but you can do it...)
 //	'  v_Kd = vec3(1.0, 1.0, 0.0); \n'	+ // TEST; color fixed at green
   '}\n';
@@ -95,12 +102,13 @@ var FSHADER_SOURCE =
   'varying vec3 v_Normal;\n' +				// Find 3D surface normal at each pix
   'varying vec4 v_Position;\n' +			// pixel's 3D pos too -- in 'world' coords
   'varying vec3 v_Kd;	\n' +						// Find diffuse reflectance K_d per pix
-  													// Ambient? Emissive? Specular? almost
+  'varying float v_State; \n' +// Ambient? Emissive? Specular? almost
   													// NEVER change per-vertex: I use 'uniform' values
-
+  'varying vec4 v_Color; \n' +
   'void main() { \n' +
      	// Normalize! !!IMPORTANT!! TROUBLE if you don't! 
      	// normals interpolated for each pixel aren't 1.0 in length any more!
+
 	'  vec3 normal = normalize(v_Normal); \n' +
     '  vec3 eyeDirection = normalize(u_eyePosWorld - v_Position.xyz); \n' +
 	'  vec3 lightDirection0 = normalize(u_LampSet[0].pos - v_Position.xyz);\n' +
@@ -125,8 +133,21 @@ var FSHADER_SOURCE =
   '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
   '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+ 'if (v_State == 1.0){ \n'+
   '  gl_FragColor = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1 , 1.0);\n' +
-  '}\n';
+  '}\n' +
+  //'if (v_State == 0.0){ \n'+
+'if (v_State == 0.0){ \n'+
+'  vec3 diffuseComb = (v_Color.rgb * (emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1)) + v_Color.rgb * (emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1);\n' +
+' gl_FragColor = vec4(diffuseComb, v_Color.a);\n' +
+//'v_Color = vec4(diffuse, v_Color.a);\n'  +
+'}\n' +
+//'v_Color = vec4(diffuse, a_Color.a);\n'  +
+'}\n';
+  '}\n' +
+
+'}\n'
+;
 
 var floatsPerVertex = 7;
 var ANGLE_STEP = 45.0;
@@ -225,6 +246,11 @@ function main()
     u_light1Diff = gl.getUniformLocation(gl.program, 'u_LampSet[1].diff');
     u_light1Spec = gl.getUniformLocation(gl.program, 'u_LampSet[1].spec');
     
+    state = gl.getUniformLocation(gl.program, 'u_State');
+    
+    gl.uniform1f(state,0.0);
+    
+    console.log(state);
     if( !u_light0Pos || !u_light0Amb || !u_light0Diff || !u_light0Spec
     ||  !u_light1Pos || !u_light1Amb || !u_light1Diff || !u_light1Spec  ) {
       console.log('Failed to get the lights storage locations');
@@ -530,6 +556,7 @@ function createCylinder(){
   cylPos = [];
   cylInd = [];
   cylNorm = [];
+  cylColors = [];
   
   cylPos.push(0.0);
   cylPos.push(0.0);
@@ -547,6 +574,9 @@ function createCylinder(){
     cylNorm.push(0.0);
     cylNorm.push(0.0);
     cylNorm.push(-1.0);
+      cylColors.push(.5);
+      cylColors.push(0);
+      cylColors.push(1);
   }
   for(i = 0; i <= CYL_DIV; i++) {
     ai = i * 2 * Math.PI / CYL_DIV;
@@ -558,6 +588,9 @@ function createCylinder(){
     cylNorm.push(0.0);
     cylNorm.push(0.0);
     cylNorm.push(1.0);
+      cylColors.push(.5);
+      cylColors.push(0);
+      cylColors.push(1);
   }
   cylPos.push(0.0);
   cylPos.push(0.0);
@@ -565,6 +598,9 @@ function createCylinder(){
   cylNorm.push(0.0);
   cylNorm.push(0.0);
   cylNorm.push(1.0);
+    cylColors.push(.5);
+    cylColors.push(0);
+    cylColors.push(1);
   for (i = 1; i <=CYL_DIV; i++) {
     cylInd.push(0);
     cylInd.push(i);
@@ -586,6 +622,9 @@ function createCylinder(){
     cylNorm.push(ci);
     cylNorm.push(si);
     cylNorm.push(0.0);
+      cylColors.push(.5);
+      cylColors.push(0);
+      cylColors.push(1);
   }
   for(i = 0; i <= CYL_DIV; i++) {
     ai = i * 2 * Math.PI / CYL_DIV;
@@ -597,6 +636,9 @@ function createCylinder(){
     cylNorm.push(ci);
     cylNorm.push(si);
     cylNorm.push(0.0);
+      cylColors.push(.5);
+      cylColors.push(0);
+      cylColors.push(1);
   }
   for (i = 1; i <=CYL_DIV; i++) {
     cylInd.push(j+i);
@@ -923,7 +965,7 @@ function initVertexBuffers(gl) {
   var positions = [];
   var normals = [];
   var indices = [];
-  
+  var colors = [];
   sphStart = 0;
   for (i = 0, j = 0; i < sphInd.length; i++, j++) {
     indices.push(sphInd[i]);
@@ -931,6 +973,7 @@ function initVertexBuffers(gl) {
   for (i = 0, k = 0; i < sphPos.length; i++, k++) {
     positions.push(sphPos[i]);
     normals.push(sphNorm[i]);
+     colors.push(.5);
   }
   
   gndStart = j*2;
@@ -940,6 +983,7 @@ function initVertexBuffers(gl) {
   for (i = 0; i < gndPos.length; i++, k++) {
     positions.push(gndPos[i]);
     normals.push(gndNorm[i]);
+      colors.push(.5);
   }
   
   cylStart = j*2;
@@ -949,6 +993,7 @@ function initVertexBuffers(gl) {
   for (i = 0; i < cylPos.length; i++, k++) {
     positions.push(cylPos[i]);
     normals.push(cylNorm[i]);
+      colors.push(.5);
   }
   
   cubeStart = j*2;
@@ -958,6 +1003,7 @@ function initVertexBuffers(gl) {
   for (i = 0; i < cubePos.length; i++, k++) {
     positions.push(cubePos[i]);
     normals.push(cubeNorm[i]);
+     colors.push(.5);
   }
   
   coneStart = j*2;
@@ -967,6 +1013,7 @@ function initVertexBuffers(gl) {
   for (i = 0; i < conePos.length; i++, k++) {
     positions.push(conePos[i]);
     normals.push(coneNorm[i]);
+      colors.push(.5);
   }
     sepStart = j*2;
   for (i = 0; i < sepInd.length; i++, j++) {
@@ -975,10 +1022,12 @@ function initVertexBuffers(gl) {
   for (i = 0; i < sepPos.length; i++, k++) {
     positions.push(sepPos[i]);
     normals.push(sepNorm[i]);
+      colors.push(.5);
   }
 
   if (!initArrayBuffer(gl, 'a_Position', new Float32Array(positions), gl.FLOAT, 3)) return -1;
   if (!initArrayBuffer(gl, 'a_Normal', new Float32Array(normals), gl.FLOAT, 3))  return -1;
+  if (!initArrayBuffer(gl, 'a_Color', new Float32Array(colors), gl.FLOAT, 3))  return -1;
 
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
