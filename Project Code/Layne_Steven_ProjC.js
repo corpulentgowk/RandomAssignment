@@ -1,83 +1,134 @@
 var VSHADER_SOURCE =
-'attribute vec4 a_Position;\n' +
-'attribute vec4 a_Normal;\n' +
-'uniform mat4 u_ProjMatrix;\n' +
-'uniform mat4 u_ViewMatrix;\n' +
-'uniform mat4 u_ModelMatrix;\n' +
-'uniform mat4 u_NormalMatrix;\n' +
-'uniform vec3 u_Ke;\n' +
-'uniform vec3 u_Kd;\n' +
-'uniform vec3 u_Ka;\n' +
-'uniform vec3 u_Ks;\n' +
-'varying vec3 v_Ke;\n' +
-'varying vec3 v_Kd;\n' +
-'varying vec3 v_Ka;\n' +
-'varying vec3 v_Ks;\n' +
-'varying vec3 v_Normal;\n' +
-'varying vec3 v_Position;\n' +
-'void main() {\n' +
-' gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
-' v_Position = vec3(u_ModelMatrix * a_Position);\n' +
-' v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
-' v_Kd = u_Kd;\n' +
-' v_Ke = u_Ke;\n' +
-' v_Ks = u_Ks;\n' +
-' v_Ka = u_Ka;\n' +
-'}\n';
+	//-------------Set precision.
+	// GLSL-ES 2.0 defaults (from spec; '4.5.3 Default Precision Qualifiers'):
+	// DEFAULT for Vertex Shaders: 	precision highp float; precision highp int;
+	//									precision lowp sampler2D; precision lowp samplerCube;
+	// DEFAULT for Fragment Shaders:  UNDEFINED for float; precision mediump int;
+	//									precision lowp sampler2D;	precision lowp samplerCube;
+	//--------------- GLSL Struct Definitions:
+	'struct MatlT {\n' +		// Describes one Phong material by its reflectances:
+	'		vec3 emit;\n' +			// Ke: emissive -- surface 'glow' amount (r,g,b);
+	'		vec3 ambi;\n' +			// Ka: ambient reflectance (r,g,b)
+	'		vec3 diff;\n' +			// Kd: diffuse reflectance (r,g,b)
+	'		vec3 spec;\n' + 		// Ks: specular reflectance (r,g,b)
+	'		int shiny;\n' +			// Kshiny: specular exponent (integer >= 1; typ. <200)
+  '		};\n' +
+  //																
+	//-------------ATTRIBUTES of each vertex, read from our Vertex Buffer Object
+  'attribute vec4 a_Position; \n' +		// vertex position (model coord sys)
+  'attribute vec4 a_Normal; \n' +			// vertex normal vector (model coord sys)
 
+										
+	//-------------UNIFORMS: values set from JavaScript before a drawing command.
+// 	'uniform vec3 u_Kd; \n' +						// Phong diffuse reflectance for the 
+ 																			// entire shape. Later: as vertex attrib.
+	'uniform MatlT u_MatlSet[1];\n' +		// Array of all materials.
+  'uniform mat4 u_ViewMatrix; \n' +
+  'uniform mat4 u_ProjMatrix;\n' +
+  'uniform mat4 u_ModelMatrix; \n' + 		// Model matrix
+  'uniform mat4 u_NormalMatrix; \n' +  	// Inverse Transpose of ModelMatrix;
+  																			// (won't distort normal vec directions
+  																			// but it usually WILL change its length)
+  
+	//-------------VARYING:Vertex Shader values sent per-pixel to Fragment shader:
+	'varying vec3 v_Kd; \n' +							// Phong Lighting: diffuse reflectance
+																				// (I didn't make per-pixel Ke,Ka,Ks;
+																				// we use 'uniform' values instead)
+  'varying vec4 v_Position; \n' +				
+  'varying vec3 v_Normal; \n' +					// Why Vec3? its not a point, hence w==0
+	//-----------------------------------------------------------------------------
+  'void main() { \n' +
+		// Compute CVV coordinate values from our given vertex. This 'built-in'
+		// 'varying' value gets interpolated to set screen position for each pixel.
+  '  gl_Position = gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
+		// Calculate the vertex position & normal vec in the WORLD coordinate system
+		// for use as a 'varying' variable: fragment shaders get per-pixel values
+		// (interpolated between vertices for our drawing primitive (TRIANGLE)).
+  '  v_Position = u_ModelMatrix * a_Position; \n' +
+		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
+		// gets interpolated (in world coords) for each pixel's fragment shader.
+  '  v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
+	'	 v_Kd = u_MatlSet[0].diff; \n' +		// find per-pixel diffuse reflectance from per-vertex
+													// (no per-pixel Ke,Ka, or Ks, but you can do it...)
+//	'  v_Kd = vec3(1.0, 1.0, 0.0); \n'	+ // TEST; color fixed at green
+  '}\n';
+
+//=============================================================================
 // Fragment shader program
+//=============================================================================
 var FSHADER_SOURCE =
-'#ifdef GL_ES\n' +
-'precision mediump float;\n' +
-'#endif\n' +
+	//-------------Set precision.
+	// GLSL-ES 2.0 defaults (from spec; '4.5.3 Default Precision Qualifiers'):
+	// DEFAULT for Vertex Shaders: 	precision highp float; precision highp int;
+	//									precision lowp sampler2D; precision lowp samplerCube;
+	// DEFAULT for Fragment Shaders:  UNDEFINED for float; precision mediump int;
+	//									precision lowp sampler2D;	precision lowp samplerCube;
+	// MATCH the Vertex shader precision for float and int:
+  'precision highp float;\n' +
+  'precision highp int;\n' +
+  //
+	//--------------- GLSL Struct Definitions:
+	'struct LampT {\n' +		// Describes one point-like Phong light source
+	'		vec3 pos;\n' +			// (x,y,z,w); w==1.0 for local light at x,y,z position
+													//		   w==0.0 for distant light from x,y,z direction 
+	' 	vec3 ambi;\n' +			// Ia ==  ambient light source strength (r,g,b)
+	' 	vec3 diff;\n' +			// Id ==  diffuse light source strength (r,g,b)
+	'		vec3 spec;\n' +			// Is == specular light source strength (r,g,b)
+	'}; \n' +
+	//
+	'struct MatlT {\n' +		// Describes one Phong material by its reflectances:
+	'		vec3 emit;\n' +			// Ke: emissive -- surface 'glow' amount (r,g,b);
+	'		vec3 ambi;\n' +			// Ka: ambient reflectance (r,g,b)
+	'		vec3 diff;\n' +			// Kd: diffuse reflectance (r,g,b)
+	'		vec3 spec;\n' + 		// Ks: specular reflectance (r,g,b)
+	'		int shiny;\n' +			// Kshiny: specular exponent (integer >= 1; typ. <200)
+  '		};\n' +
+  //
+	//-------------UNIFORMS: values set from JavaScript before a drawing command.
+  // first light source: (YOU write a second one...)
+	'uniform LampT u_LampSet[2];\n' +		// Array of all light sources.
+	'uniform MatlT u_MatlSet[1];\n' +		// Array of all materials.
+	//
+  'uniform vec3 u_eyePosWorld; \n' + 	// Camera/eye location in world coords.
+  
+ 	//-------------VARYING:Vertex Shader values sent per-pix'''''''''''''''';el to Fragment shader: 
+  'varying vec3 v_Normal;\n' +				// Find 3D surface normal at each pix
+  'varying vec4 v_Position;\n' +			// pixel's 3D pos too -- in 'world' coords
+  'varying vec3 v_Kd;	\n' +						// Find diffuse reflectance K_d per pix
+  													// Ambient? Emissive? Specular? almost
+  													// NEVER change per-vertex: I use 'uniform' values
 
-'uniform vec3 u_light1Pos;\n' +
-'uniform vec3 u_light1Amb;\n' +
-'uniform vec3 u_light1Diff;\n' +
-'uniform vec3 u_light1Spec;\n' +
-'uniform vec3 u_eyePosWorld;\n' +
+  'void main() { \n' +
+     	// Normalize! !!IMPORTANT!! TROUBLE if you don't! 
+     	// normals interpolated for each pixel aren't 1.0 in length any more!
+	'  vec3 normal = normalize(v_Normal); \n' +
+    '  vec3 eyeDirection = normalize(u_eyePosWorld - v_Position.xyz); \n' +
+	'  vec3 lightDirection0 = normalize(u_LampSet[0].pos - v_Position.xyz);\n' +
+	'  vec3 lightDirection1 = normalize(u_LampSet[1].pos - v_Position.xyz);\n' +
 
-'uniform vec3 u_light0Diff;\n' +
-'uniform vec3 u_light0Spec;\n' +
-'uniform vec3 u_light0Pos;\n' +
-'uniform vec3 u_light0Amb;\n' +
+//Multiplicative
+	'  float nDotL0 = max(dot(lightDirection0, normal), 0.0); \n' +
+	'  float nDotL1 = max(dot(lightDirection1, normal), 0.0); \n' +
+	'  vec3 H0 = normalize(lightDirection0 + eyeDirection); \n' +
+	'  vec3 H1 = normalize(lightDirection1 + eyeDirection); \n' +
+	'  float nDotH0 = max(dot(H0, normal), 0.0); \n' +
+	'  float nDotH1 = max(dot(H1, normal), 0.0); \n' +
+	'  float e64_0 = pow(nDotH0, float(u_MatlSet[0].shiny));\n' +
+	'  float e64_1 = pow(nDotH1, float(u_MatlSet[0].shiny));\n' +
+ 	// Calculate the final color from diffuse reflection and ambient reflection
+//  '	 vec3 emissive = u_Ke;' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotL0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+  '  gl_FragColor = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1 , 1.0);\n' +
+  '}\n';
 
-
-'varying vec3 v_Normal;\n' +
-'varying vec3 v_Position;\n' +
-
-'varying vec3 v_Ke;\n' +
-'varying vec3 v_Ka;\n' +
-'varying vec3 v_Kd;\n' +
-'varying vec3 v_Ks;\n' +
-
-'uniform int u_Kshiny;\n' +
-
-'void main() {\n' +
-' vec3 normal = normalize(v_Normal);\n' +
-' vec3 eyeDirection = normalize(u_eyePosWorld - v_Position);\n' +
-' vec3 lightDirection0 = vec3(u_light0Pos - v_Position);\n' +
-' float r0 = sqrt(pow(lightDirection0.x, 2.0) + pow(lightDirection0.y, 2.0) + pow(lightDirection0.z, 2.0));\n' +
-' float att0 = 1.0/(1.0+0.0*r0+0.0*pow(r0, 2.0));\n' +
-' lightDirection0 = normalize(lightDirection0);\n' +
-' float nDotL0 = dot(lightDirection0, normal);\n' +
-' vec3 reflect0 = normalize(2.0*nDotL0*v_Normal - lightDirection0);\n' +
-' float eDotR0 = dot(eyeDirection, reflect0);\n' +
-' vec3 lightDirection1 = vec3(u_light1Pos - v_Position);\n' +
-' float r1 = sqrt(pow(lightDirection1.x, 2.0) + pow(lightDirection1.y, 2.0) + pow(lightDirection1.z, 2.0));\n' +
-' float att1 = 1.0/(1.0+0.0*r1+0.0*pow(r1, 2.0));\n' +
-' lightDirection1 = normalize(lightDirection1);\n' +
-' float nDotL1 = dot(lightDirection1, normal);\n' +
-' vec3 reflect1 = normalize(2.0*nDotL1*v_Normal - lightDirection1);\n' +
-' float eDotR1 = dot(eyeDirection, reflect1);\n' +
-' vec3 emissive = v_Ke;\n' +
-' vec3 ambient = v_Ka*(u_light0Amb + u_light1Amb);\n' +
-' vec3 diffuse = v_Kd*(att0*(max(0.0, nDotL0)*u_light0Diff)+att1*(max(0.0, nDotL1)*u_light1Diff));\n' +
-' vec3 specular = v_Ks*(att0*u_light0Spec*pow(max(0.0, eDotR0), float(u_Kshiny)) + att1*u_light1Spec*pow(max(0.0, eDotR1), float(u_Kshiny)));\n' +
-'   gl_FragColor = vec4(emissive + ambient + diffuse + specular, 1.0);\n' +
-'}\n';
-
-var floatsPerVertex = 6;
+var floatsPerVertex = 7;
 var ANGLE_STEP = 45.0;
 var currentAngle = 0.0;
 
@@ -88,6 +139,9 @@ var speed = 0.0;
 var g_eyeX = 0.25, g_eyeY = -20.0, g_eyeZ = 4.60;
 var g_lookX = 0.0, g_lookY = 0.0, g_lookZ = 0.0;
 var MAGNITUDE = 10.0;
+
+var normal = new Float32Array([1,-3, 0]); //arbitrary normal vector assign these to all shapes you dont want to shade. Should be parallel to light source
+
 
 var gndPos, gndNorm, gndInd, gndStart;
 var sphPos, sphNorm, sphInd, sphStart;
@@ -161,28 +215,26 @@ function main()
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
 
-    u_light0Pos = gl.getUniformLocation(gl.program, 'u_light0Pos');
-    u_light0Amb = gl.getUniformLocation(gl.program, 'u_light0Amb');
-    u_light0Diff = gl.getUniformLocation(gl.program, 'u_light0Diff');
-    u_light0Spec = gl.getUniformLocation(gl.program, 'u_light0Spec');
+    u_light0Pos  = gl.getUniformLocation(gl.program, 'u_LampSet[0].pos');	
+    u_light0Amb  = gl.getUniformLocation(gl.program, 'u_LampSet[0].ambi');
+    u_light0Diff = gl.getUniformLocation(gl.program, 'u_LampSet[0].diff');
+    u_light0Spec = gl.getUniformLocation(gl.program, 'u_LampSet[0].spec');
     
-    u_light1Pos = gl.getUniformLocation(gl.program, 'u_light1Pos');
-    u_light1Amb = gl.getUniformLocation(gl.program, 'u_light1Amb');
-    u_light1Diff = gl.getUniformLocation(gl.program, 'u_light1Diff');
-    u_light1Spec = gl.getUniformLocation(gl.program, 'u_light1Spec');
+    u_light1Pos  = gl.getUniformLocation(gl.program, 'u_LampSet[1].pos');	
+    u_light1Amb  = gl.getUniformLocation(gl.program, 'u_LampSet[1].ambi');
+    u_light1Diff = gl.getUniformLocation(gl.program, 'u_LampSet[1].diff');
+    u_light1Spec = gl.getUniformLocation(gl.program, 'u_LampSet[1].spec');
     
     if( !u_light0Pos || !u_light0Amb || !u_light0Diff || !u_light0Spec
     ||  !u_light1Pos || !u_light1Amb || !u_light1Diff || !u_light1Spec  ) {
       console.log('Failed to get the lights storage locations');
       return;
     }
-    
-
-    u_Ke = gl.getUniformLocation(gl.program, 'u_Ke');
-    u_Ka = gl.getUniformLocation(gl.program, 'u_Ka');
-    u_Kd = gl.getUniformLocation(gl.program, 'u_Kd');
-    u_Ks = gl.getUniformLocation(gl.program, 'u_Ks');
-    u_Kshiny = gl.getUniformLocation(gl.program, 'u_Kshiny');
+    u_Ke = gl.getUniformLocation(gl.program, 'u_MatlSet[0].emit');
+    u_Ka = gl.getUniformLocation(gl.program, 'u_MatlSet[0].ambi');
+    u_Kd = gl.getUniformLocation(gl.program, 'u_MatlSet[0].diff');
+    u_Ks = gl.getUniformLocation(gl.program, 'u_MatlSet[0].spec');
+    u_Kshiny = gl.getUniformLocation(gl.program, 'u_MatlSet[0].shiny');
     
     if(!u_Ke || !u_Ka  ||
      !u_Kd ||
@@ -317,8 +369,7 @@ function createGnd() {
   gndNorm = new Float32Array(gndPos);
 }
 
-function createSphere()
-{
+function createSphere(){
   var SPHERE_DIV = 36;
 
   var i, ai, si, ci;
@@ -471,8 +522,7 @@ function createT(){
     ];
   }
 
-function createCylinder()
-{
+function createCylinder(){
   var CYL_DIV = 36;
   var i, ai, si, ci;
   var p1, p2;
@@ -559,8 +609,7 @@ function createCylinder()
   }
 }
 
-function createCone()
-{
+function createCone(){
   var CONE_DIV = 72;
   var i, ai, si, ci, j;
   conePos = [];
@@ -704,8 +753,7 @@ function makeSeptagon() {
 }
 
 
-function createCube()
-{
+function createCube(){
   cubePos = new Float32Array([
     0.5, 0.5, 0.5,    
     -0.5, 0.5, 0.5,   
@@ -753,6 +801,115 @@ function createCube()
          18, 20, 22];
     
 }
+function makeT(){
+  tVerts = new Float32Array([
+//Top Side
+    0, .5,-.5, 1, normal[0], normal[1], normal[2],//B
+    .5,.5,-.5, 1,  normal[0], normal[1], normal[2],//C
+    .25, 1, -.25, 1,  normal[0], normal[1], normal[2],//Top Point
+
+     0, .5,-.5, 1,  normal[0], normal[1], normal[2],//B
+     0, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+     .25, 1, -.25, 1, normal[0], normal[1], normal[2], //Top Point
+
+     0, .5, 0 , 1, normal[0], normal[1], normal[2],//H
+     .5, .5, 0 , 1, normal[0], normal[1], normal[2],//E
+     .25, 1, -.25, 1,  normal[0], normal[1], normal[2],//Top Point
+
+    .5,.5,-.5, 1, normal[0], normal[1], normal[2],//C
+    .5, .5, 0 , 1, normal[0], normal[1], normal[2],//E
+    .25, 1, -.25, 1,  normal[0], normal[1], normal[2],//Top Point
+  //Bottom Side
+      0, 0,-.5, 1,  normal[0], normal[1], normal[2],//A
+    .5,0,-.5, 1,normal[0], normal[1], normal[2],//D
+    .25, -.5, -.25, 1, normal[0], normal[1], normal[2],//Bottom Point
+
+     0, 0,-.5, 1,  normal[0], normal[1], normal[2],//A
+     0, 0, 0 , 1,  normal[0], normal[1], normal[2],//G
+     .25, -.5, -.25, 1, normal[0], normal[1], normal[2],//Bottom Point
+
+     0, 0, 0 , 1,  normal[0], normal[1], normal[2],//G
+     .5, 0, 0 , 1,  normal[0], normal[1], normal[2],//F
+     .25, -.5, -.25, 1, normal[0], normal[1], normal[2],//Bottom Point
+
+    .5,0,-.5, 1, normal[0], normal[1], normal[2],//D
+    .5, 0, 0 , 1,  normal[0], normal[1], normal[2],//F
+    .25, -.5, -.25, 1, normal[0], normal[1], normal[2], //Bottom Point
+
+    //Front Side
+     .5, .5, 0 , 1, normal[0], normal[1], normal[2], //E
+     .5, 0, 0 , 1,  normal[0], normal[1], normal[2],//F
+     .25,.25,.5,1,  normal[0], normal[1], normal[2],// Front point
+
+     0, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+     .5, .5, 0 , 1,  normal[0], normal[1], normal[2],//E
+     .25,.25,.5,1, normal[0], normal[1], normal[2],// Front point
+
+      0, .5, 0 , 1, normal[0], normal[1], normal[2],//H
+      0, 0, 0 , 1, normal[0], normal[1], normal[2],//G
+      .25,.25,.5,1,normal[0], normal[1], normal[2],// Front point
+
+      0, 0, 0 , 1,  normal[0], normal[1], normal[2],//G
+     .5, 0, 0 , 1, normal[0], normal[1], normal[2],//F
+     .25,.25,.5,1, normal[0], normal[1], normal[2],// Front point
+
+      //Back Side
+     .5, .5, -.5 , 1, normal[0], normal[1], normal[2],//C
+     .5, 0, -.5 , 1, normal[0], normal[1], normal[2],//D
+     .25,.25,-1,1, normal[0], normal[1], normal[2],// Front point
+
+     0, .5, -.5 , 1,  normal[0], normal[1], normal[2],//B
+     .5, .5, -.5 , 1,  normal[0], normal[1], normal[2],//C
+     .25,.25,-1,1,  normal[0], normal[1], normal[2],// Front point
+
+      0, .5, -.5 , 1, normal[0], normal[1], normal[2], //B
+      0, 0, -.5 , 1, normal[0], normal[1], normal[2],//A
+      .25,.25,-1,1,  normal[0], normal[1], normal[2],// Front point
+
+      0, 0, -.5 , 1,  normal[0], normal[1], normal[2],//A
+     .5, 0, -.5 , 1,  normal[0], normal[1], normal[2],//D
+     .25,.25,-1,1,  normal[0], normal[1], normal[2],// Front point
+
+     //Left Side
+
+     0, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+    0, .5, -.5 , 1,  normal[0], normal[1], normal[2],//B
+    -.5,.25,-.25, 1,normal[0], normal[1], normal[2], // Left point
+
+    0, .5, -.5 , 1,  normal[0], normal[1], normal[2],//B
+     0, 0, -.5 , 1,  normal[0], normal[1], normal[2],//A
+     -.5,.25,-.25, 1,  normal[0], normal[1], normal[2],// Left point
+
+    0, 0, 0 , 1,  normal[0], normal[1], normal[2],//G
+    0, 0, -.5 , 1,  normal[0], normal[1], normal[2],//A
+    -.5,.25,-.25, 1, normal[0], normal[1], normal[2],// Left point
+
+    0, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+    0, 0, 0 , 1, normal[0], normal[1], normal[2],//G
+    -.5,.25,-.25, 1,  normal[0], normal[1], normal[2],// Left point
+         
+    //Right Side
+
+    .5, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+    .5, .5, -.5 , 1,normal[0], normal[1], normal[2],//B
+    1,.25,-.25, 1, normal[0], normal[1], normal[2],// Left point
+
+    .5, .5, -.5 , 1,  normal[0], normal[1], normal[2],//B
+    .5, 0, -.5 , 1,  normal[0], normal[1], normal[2],//A
+    1,.25,-.25, 1, normal[0], normal[1], normal[2],// Left point
+
+    .5, 0, 0 , 1, normal[0], normal[1], normal[2],//G
+    .5, 0, -.5 , 1,  normal[0], normal[1], normal[2],//A
+    1,.25,-.25, 1, normal[0], normal[1], normal[2],// Left point
+
+    .5, .5, 0 , 1,  normal[0], normal[1], normal[2],//H
+    .5, 0, 0 , 1,  normal[0], normal[1], normal[2],//G
+    1,.25,-.25, 1,  normal[0], normal[1], normal[2],// Left point
+
+
+
+    ]);
+  }
 
 function initVertexBuffers(gl) { 
 
@@ -761,6 +918,7 @@ function initVertexBuffers(gl) {
   createCylinder();
   createCube();
   createCone();
+  makeT();
   makeSeptagon();
   var positions = [];
   var normals = [];
@@ -821,7 +979,7 @@ function initVertexBuffers(gl) {
 
   if (!initArrayBuffer(gl, 'a_Position', new Float32Array(positions), gl.FLOAT, 3)) return -1;
   if (!initArrayBuffer(gl, 'a_Normal', new Float32Array(normals), gl.FLOAT, 3))  return -1;
-  
+
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
  
@@ -832,7 +990,82 @@ function initVertexBuffers(gl) {
   }
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  //Trying to integrate more
+/* TESSSSSSTTT
 
+*/
+
+////
+/*
+var mySiz = tVerts.length;
+
+	// How many vertices total?
+	var nn = mySiz / floatsPerVertex;
+	console.log('nn is', nn, 'mySiz is', mySiz, 'floatsPerVertex is', floatsPerVertex);
+	// Copy all shapes into one big Float32 array:
+var colorShapes = new Float32Array(mySiz);
+	// Copy them:  remember where to start for each shape:
+
+    tStart = 0;
+    for(j=0; j< tVerts.length; i++, j++) {// don't initialize i -- reuse it!
+    colorShapes[i] = tVerts[j];
+    }
+  // Create a buffer object on the graphics hardware:
+  var shapeBufferHandle = gl.createBuffer();  
+  if (!shapeBufferHandle) {
+    console.log('Failed to create the shape buffer object');
+    return false;
+  }
+  // Bind the the buffer object to target:
+  gl.bindBuffer(gl.ARRAY_BUFFER, shapeBufferHandle);
+  // Transfer data from Javascript array colorShapes to Graphics system VBO
+  // (Use sparingly--may be slow if you transfer large shapes stored in files)
+  gl.bufferData(gl.ARRAY_BUFFER, colorShapes, gl.STATIC_DRAW);
+    
+  //Get graphics system's handle for our Vertex Shader's position-input variable: 
+  var a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+  if (a_Position < 0) {
+    console.log('Failed to get the storage location of a_Position');
+    return -1;
+  }
+
+  var FSIZE = colorShapes.BYTES_PER_ELEMENT; // how many bytes per stored value?
+console.log(a_Position);
+ 
+  // Use handle to specify how to retrieve **POSITION** data from our VBO:
+  gl.vertexAttribPointer(
+  		a_Position, 	// choose Vertex Shader attribute to fill with data
+  		4, 						// how many values? 1,2,3 or 4.  (we're using x,y,z,w)
+  		gl.FLOAT, 		// data type for each value: usually gl.FLOAT
+  		false, 				// did we supply fixed-point data AND it needs normalizing?
+  		FSIZE * floatsPerVertex, // Stride -- how many bytes used to store each vertex?							// (x,y,z,w, r,g,b) * bytes/value
+  		0);						// Offset -- now many bytes from START of buffer to the
+  									// value we will actually use?
+   gl.enableVertexAttribArray(a_Position);  
+  									// Enable assignment of vertex buffer object's position data
+
+    var a_Normal = gl.getAttribLocation(gl.program, 'a_Normal');
+    if(a_Normal < 0) {
+        console.log('Failed to get the storage location of a_Normal');
+        return -1;
+    }
+    // Use handle to specify how to retrieve color data from our VBO:
+    gl.vertexAttribPointer(
+                           a_Normal, 				// choose Vertex Shader attribute to fill with data
+                           3, 							// how many values? 1,2,3 or 4. (we're using R,G,B)
+                           gl.FLOAT, 			// data type for each value: usually gl.FLOAT
+                           false, 					// did we supply fixed-point data AND it needs normalizing?
+                           FSIZE * floatsPerVertex, 			// Stride -- how many bytes used to store each vertex?
+                           // (x,y,z,w, r,g,b) * bytes/value
+                           FSIZE * 4);			// Offset -- how many bytes from START of buffer to the
+    // value we will actually use?  Need to skip over x,y,z,w
+     
+    gl.enableVertexAttribArray(a_Normal);
+
+	//--------------------------------DONE!
+  // Unbind the buffer object 
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);*/
   return indices.length;
 }
 
@@ -859,8 +1092,7 @@ function initArrayBuffer(gl, attribute, data, type, num) {
   return true;
 }
 
-function setPhong(gl, Ke, Ka, Kd, Ks, Kshiny)
-{
+function setPhong(gl, Ke, Ka, Kd, Ks, Kshiny){
   gl.uniform3f(u_Ke, Ke.x, Ke.y, Ke.z);   
   gl.uniform3f(u_Ka, Ka.x, Ka.y, Ka.z);   
   gl.uniform3f(u_Kd, Kd.x, Kd.y, Kd.z);   
@@ -900,8 +1132,7 @@ function animate2(angle){
 }
 
 
-function keydown(ev, gl, u_ViewMatrix, viewMatrix,u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix)
-{
+function keydown(ev, gl, u_ViewMatrix, viewMatrix,u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix){
   console.log(ev.keyCode);
   var q = new Quaternion(0,0,0,1);
   if(ev.keyCode == 39) {      //right key
@@ -950,8 +1181,7 @@ function keydown(ev, gl, u_ViewMatrix, viewMatrix,u_ProjMatrix, projMatrix, u_Mo
 }
 
 
-function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix)
-{
+function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix){
   var Ke, Ka, Kd, Ks, Kshiny;
   
   pushMatrix(modelMatrix);
@@ -981,7 +1211,7 @@ function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatri
 
 
 //Tree Building
-  var matIndex = 4;
+  var matIndex = 17;
   Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
   Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
   Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
@@ -1178,8 +1408,7 @@ build4();
 
 }
 
-function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix)
-{
+function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix){
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
   var Ke, Ka, Kd, Ks, Kshiny;
