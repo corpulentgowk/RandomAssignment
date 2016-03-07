@@ -1327,12 +1327,24 @@ function buildTree(){
 
 }
 function build4(){
-
+  var matIndex = 17;
+  Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
+  Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
+  Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
+  Ks = new Vector3([Material(matIndex)["specular"][0], Material(matIndex)["specular"][1], Material(matIndex)["specular"][2]]);
+  Kshiny = Material(matIndex)["shiny"];
+  setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);
     pushMatrix(modelMatrix);
     modelMatrix.translate(1, 4, 0.0);
     buildTree();
     modelMatrix = popMatrix();
-    
+  var matIndex = 15;
+  Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
+  Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
+  Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
+  Ks = new Vector3([Material(matIndex)["specular"][0], Material(matIndex)["specular"][1], Material(matIndex)["specular"][2]]);
+  Kshiny = Material(matIndex)["shiny"];
+  setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);    
     pushMatrix(modelMatrix);
     modelMatrix.translate(2, 7, 0.0);
     buildTree();
@@ -1342,7 +1354,13 @@ function build4(){
     modelMatrix.translate(6, 2, 0.0);
     buildTree();
     modelMatrix = popMatrix();
-      
+   var matIndex = 12;
+  Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
+  Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
+  Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
+  Ks = new Vector3([Material(matIndex)["specular"][0], Material(matIndex)["specular"][1], Material(matIndex)["specular"][2]]);
+  Kshiny = Material(matIndex)["shiny"];
+  setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);     
     pushMatrix(modelMatrix);
     modelMatrix.translate(3, 6, 0.0);
     buildTree();
@@ -1380,7 +1398,7 @@ build4();
   modelMatrix.translate(-3.5, 0.0, 0.0);
   
   pushMatrix(modelMatrix);
-  modelMatrix.translate(-1.5*Math.sin((30.0+20.0*Math.sin(currentAngle*Math.PI/180))*Math.PI/180), 0.0, 0.05);
+  /*modelMatrix.translate(-1.5*Math.sin((30.0+20.0*Math.sin(currentAngle*Math.PI/180))*Math.PI/180), 0.0, 0.05);
   
   pushMatrix(modelMatrix);
   modelMatrix.rotate(90.0, 1, 0, 0);
@@ -1451,7 +1469,7 @@ build4();
   
   modelMatrix = popMatrix();
   
-
+*/
  
 
 
