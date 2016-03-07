@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Project C!</title>
+    <title>EECS 351: Project C</title>
 
   </head>
 
@@ -13,22 +13,28 @@
     </canvas>
 
 <table>
+  <h2> In the Still of The Night: Twirly Trees, Perky P's, and Burly Bees? :-( .</h2> 
   <p>User Information  <button type="button" onclick="help()"> Help! </button></p>
   <!--div id='Mouse'> Mouse Drag totals (CVV coords) </div>
   <button type="button" onClick='clearDrag()'>Clear</button-->
-	<p>Set to Full or Clear</p>
+	<p>Set Ambient/Emissive/Diffuse/Specular States</p>
     <button type="button" onclick="setEmmissive()">Set/Clear Emmissive</button>
 	  <button type="button" onclick="setAmbient()">Set/Clear Ambient</button>
     <button type="button" onclick="setDiffuse()">Set/Clear Diffuse</button>
     <button type="button" onclick="setSpecular()">Set/Clear Specular</button>
 
-  <p>Edit RGB</p>
+  <p>Set RGB</p>
     <label>Red: </label><input id="redIn"></input><br>
     <label>Green: </label> <input id="greenIn"></input><br>
     <label>Blue: </label><input id="blueIn"></input><br>
     <button type="button" onclick="setRGB()">Set RGB</button>
-    
-    
+	<br>
+<div style="float:center">
+<form>
+  <input type="radio" onclick="setState(1)"> Gouraud Shading
+  <input type="radio" onclick="setState(2)"> Phong Shading</input>
+ <form>
+</div>
   
 
     <script src="../lib/webgl-utils.js"></script>

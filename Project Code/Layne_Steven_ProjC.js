@@ -1,11 +1,16 @@
 var VSHADER_SOURCE =
-	//-------------Set precision.
-	// GLSL-ES 2.0 defaults (from spec; '4.5.3 Default Precision Qualifiers'):
-	// DEFAULT for Vertex Shaders: 	precision highp float; precision highp int;
-	//									precision lowp sampler2D; precision lowp samplerCube;
-	// DEFAULT for Fragment Shaders:  UNDEFINED for float; precision mediump int;
-	//									precision lowp sampler2D;	precision lowp samplerCube;
+  'precision highp float;\n' +
+  'precision highp int;\n' +
+  //
 	//--------------- GLSL Struct Definitions:
+	'struct LampT {\n' +		// Describes one point-like Phong light source
+	'		vec3 pos;\n' +			// (x,y,z,w); w==1.0 for local light at x,y,z position
+													//		   w==0.0 for distant light from x,y,z direction 
+	' 	vec3 ambi;\n' +			// Ia ==  ambient light source strength (r,g,b)
+	' 	vec3 diff;\n' +			// Id ==  diffuse light source strength (r,g,b)
+	'		vec3 spec;\n' +			// Is == specular light source strength (r,g,b)
+	'}; \n' +
+	//
 	'struct MatlT {\n' +		// Describes one Phong material by its reflectances:
 	'		vec3 emit;\n' +			// Ke: emissive -- surface 'glow' amount (r,g,b);
 	'		vec3 ambi;\n' +			// Ka: ambient reflectance (r,g,b)
@@ -13,7 +18,7 @@ var VSHADER_SOURCE =
 	'		vec3 spec;\n' + 		// Ks: specular reflectance (r,g,b)
 	'		int shiny;\n' +			// Kshiny: specular exponent (integer >= 1; typ. <200)
   '		};\n' +
-  //																
+  //															
 	//-------------ATTRIBUTES of each vertex, read from our Vertex Buffer Object
   'attribute vec4 a_Position; \n' +		// vertex position (model coord sys)
   'attribute vec4 a_Normal; \n' +			// vertex normal vector (model coord sys)
@@ -22,12 +27,17 @@ var VSHADER_SOURCE =
 	//-------------UNIFORMS: values set from JavaScript before a drawing command.
 // 	'uniform vec3 u_Kd; \n' +						// Phong diffuse reflectance for the 
  																			// entire shape. Later: as vertex attrib.
-	'uniform MatlT u_MatlSet[1];\n' +		// Array of all materials.
+  'uniform MatlT u_MatlSet[1];\n' +		// Array of all materials.
+  'uniform LampT u_LampSet[2];\n' +
+  'uniform vec3 u_eyePosWorld; \n' +
+  //
   'uniform mat4 u_ViewMatrix; \n' +
   'uniform mat4 u_ProjMatrix;\n' +
   'uniform mat4 u_ModelMatrix; \n' + 		// Model matrix
   'uniform mat4 u_NormalMatrix; \n' +  	// Inverse Transpose of ModelMatrix;
-  'uniform float u_State ; \n' +																			// (won't distort normal vec directions
+  'uniform float u_State ; \n' +
+  'uniform float u_StateA ; \n' +  
+  // (won't distort normal vec directions
   																			// but it usually WILL change its length)
   
 	//-------------VARYING:Vertex Shader values sent per-pixel to Fragment shader:
@@ -38,22 +48,65 @@ var VSHADER_SOURCE =
   'varying vec3 v_Normal; \n' +					// Why Vec3? its not a point, hence w==0
   'varying vec4 v_Color; \n' +
   'varying float v_State; \n' +
+  'varying float v_StateA; \n' +
 	//-----------------------------------------------------------------------------
   'void main() { \n' +
+  	'v_State = u_State;\n' +
+	'v_StateA = u_StateA;\n' +
 		// Compute CVV coordinate values from our given vertex. This 'built-in'
 		// 'varying' value gets interpolated to set screen position for each pixel.
-    'v_State = u_State;\n' +
-    'v_Color = a_Color; \n'+
+    // Test Zone
+	'  v_Position = u_ModelMatrix * a_Position; \n' +
+		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
+		// gets interpolated (in world coords) for each pixel's fragment shader.
+    'gl_PointSize = 10.0; \n' +
+	'  v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
+	'v_Kd = u_MatlSet[0].diff; \n' +
+	'  vec3 normal = normalize(v_Normal); \n' +
+    '  vec3 eyeDirection = normalize(u_eyePosWorld - v_Position.xyz); \n' +
+	'  vec3 lightDirection0 = normalize(u_LampSet[0].pos - v_Position.xyz);\n' +
+	'  vec3 lightDirection1 = normalize(u_LampSet[1].pos - v_Position.xyz);\n' +
+
+//Multiplicative
+	'  float nDotL0 = max(dot(lightDirection0, normal), 0.0); \n' +
+	'  float nDotL1 = max(dot(lightDirection1, normal), 0.0); \n' +
+	'  vec3 H0 = normalize(lightDirection0 + eyeDirection); \n' +
+	'  vec3 H1 = normalize(lightDirection1 + eyeDirection); \n' +
+	'  float nDotH0 = max(dot(H0, normal), 0.0); \n' +
+	'  float nDotH1 = max(dot(H1, normal), 0.0); \n' +
+	'  float e64_0 = pow(nDotH0, float(u_MatlSet[0].shiny));\n' +
+	'  float e64_1 = pow(nDotH1, float(u_MatlSet[0].shiny));\n' +
+ 	// Calculate the final color from diffuse reflection and ambient reflection
+//  '	 vec3 emissive = u_Ke;' +
+  //' if (v_StateA == 0.0){ \n' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotL0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+ // '} \n'+
+  ' if (v_StateA == 1.0){ \n' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotH0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotH1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+  '} \n'+
+	
+	// Test Zone
+
+    'v_Color = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1, 1.0); \n'+
   '  gl_Position = gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
 		// Calculate the vertex position & normal vec in the WORLD coordinate system
 		// for use as a 'varying' variable: fragment shaders get per-pixel values
 		// (interpolated between vertices for our drawing primitive (TRIANGLE)).
-  '  v_Position = u_ModelMatrix * a_Position; \n' +
-		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
-		// gets interpolated (in world coords) for each pixel's fragment shader.
-  '  v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
-	'	 v_Kd = u_MatlSet[0].diff; \n' +
-    'gl_PointSize = 10.0; \n' +
+  
 
 // find per-pixel diffuse reflectance from per-vertex
 													// (no per-pixel Ke,Ka, or Ks, but you can do it...)
@@ -64,13 +117,7 @@ var VSHADER_SOURCE =
 // Fragment shader program
 //=============================================================================
 var FSHADER_SOURCE =
-	//-------------Set precision.
-	// GLSL-ES 2.0 defaults (from spec; '4.5.3 Default Precision Qualifiers'):
-	// DEFAULT for Vertex Shaders: 	precision highp float; precision highp int;
-	//									precision lowp sampler2D; precision lowp samplerCube;
-	// DEFAULT for Fragment Shaders:  UNDEFINED for float; precision mediump int;
-	//									precision lowp sampler2D;	precision lowp samplerCube;
-	// MATCH the Vertex shader precision for float and int:
+
   'precision highp float;\n' +
   'precision highp int;\n' +
   //
@@ -103,7 +150,7 @@ var FSHADER_SOURCE =
   'varying vec4 v_Position;\n' +			// pixel's 3D pos too -- in 'world' coords
   'varying vec3 v_Kd;	\n' +						// Find diffuse reflectance K_d per pix
   'varying float v_State; \n' +// Ambient? Emissive? Specular? almost
-  													// NEVER change per-vertex: I use 'uniform' values
+  'varying float v_StateA; \n' +													// NEVER change per-vertex: I use 'uniform' values
   'varying vec4 v_Color; \n' +
   'void main() { \n' +
      	// Normalize! !!IMPORTANT!! TROUBLE if you don't! 
@@ -125,6 +172,7 @@ var FSHADER_SOURCE =
 	'  float e64_1 = pow(nDotH1, float(u_MatlSet[0].shiny));\n' +
  	// Calculate the final color from diffuse reflection and ambient reflection
 //  '	 vec3 emissive = u_Ke;' +
+  //' if (v_StateA == 0.0){ \n' +
   '	 vec3 emissive = u_MatlSet[0].emit;' +
   '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotL0;\n' +
@@ -133,14 +181,23 @@ var FSHADER_SOURCE =
   '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
   '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
- 'if (v_State == 1.0){ \n'+
+ // '} \n'+
+  ' if (v_StateA == 1.0){ \n' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotH0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotH1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+  '} \n'+
+ 'if (v_State == 0.0){ \n'+
   '  gl_FragColor = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1 , 1.0);\n' +
   '}\n' +
   //'if (v_State == 0.0){ \n'+
-'if (v_State == 0.0){ \n'+
-'  vec3 diffuseComb = (v_Color.rgb * (emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1)) + v_Color.rgb * (emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1);\n' +
-' gl_FragColor = vec4(diffuseComb, v_Color.a);\n' +
-//'v_Color = vec4(diffuse, v_Color.a);\n'  +
+'if (v_State == 1.0){ \n'+
+' gl_FragColor = v_Color;\n' +
 '}\n' +
 //'v_Color = vec4(diffuse, a_Color.a);\n'  +
 '}\n';
@@ -212,6 +269,22 @@ var eOn = false;
 var aOn = false;
 var dOn = false;
 var sOn = false;
+var lOn = true;
+var state = 1.0;
+var stateA = 1.0;
+
+function setState(x){
+//console.log(x);
+	if (x == 1){
+		state = 1.0;
+		console.log("wtf");
+	}
+	if (x == 2){
+		state = 0.0;
+		console.log("annoyed");
+	}
+}
+
 
 function main()
 {
@@ -246,11 +319,7 @@ function main()
     u_light1Diff = gl.getUniformLocation(gl.program, 'u_LampSet[1].diff');
     u_light1Spec = gl.getUniformLocation(gl.program, 'u_LampSet[1].spec');
     
-    state = gl.getUniformLocation(gl.program, 'u_State');
     
-    gl.uniform1f(state,0.0);
-    
-    console.log(state);
     if( !u_light0Pos || !u_light0Amb || !u_light0Diff || !u_light0Spec
     ||  !u_light1Pos || !u_light1Amb || !u_light1Diff || !u_light1Spec  ) {
       console.log('Failed to get the lights storage locations');
@@ -302,7 +371,12 @@ function main()
   var normalMatrix = new Matrix4();
     
     var tick = function() {
-    
+    u_State = gl.getUniformLocation(gl.program, 'u_State');
+    gl.uniform1f(u_State,state);
+	
+	u_StateA = gl.getUniformLocation(gl.program, 'u_StateA');
+    gl.uniform1f(u_StateA,stateA);
+	
     currentAngle = animate2(currentAngle);
     currentAngle2 = currentAngle;
     draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix);
@@ -328,9 +402,7 @@ function main()
     light0Diff = new Vector3([1.0, 1.0, 1.0]);
     light0Spec = new Vector3([1.0, 1.0, 1.0]);
     
-    light1Amb = new Vector3([0.15, 0.15, 0.15]);
-    light1Diff = new Vector3([1.0, 1.0, 1.0]);
-    light1Spec = new Vector3([1.0, 1.0, 1.0]);
+
     
     
   gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
@@ -352,6 +424,7 @@ function createGnd() {
 
   gndPos = new Float32Array(3*2*(xcount+ycount));
   gndInd = [];
+  gndNorm =[];
             
   var xgap = xymax/(xcount-1);    
   var ygap = xymax/(ycount-1);    
@@ -361,18 +434,27 @@ function createGnd() {
     if(v%2==0) {  
       gndPos[j] = -xymax + (v  )*xgap;  
       gndPos[j+1] = -xymax;       
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0;  
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
       gndInd.push(k);
     }
     else {        
       gndPos[j] = -xymax + (v-1)*xgap;  
       gndPos[j+1] = xymax;        
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0;  
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
       gndInd.push(k);
     }
     gndPos[j+3] = yColr[0];    
       gndPos[j+4] = yColr[1];    
-      gndPos[j+5] = yColr[2];    
+      gndPos[j+5] = yColr[2]; 
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
   }
   
   for(v=0; v<2*ycount; v++, j+= 3, k++) {
@@ -381,18 +463,27 @@ function createGnd() {
       gndPos[j+1] = -xymax + (v  )*ygap;  
       gndPos[j+2] = 0.0;          
       gndInd.push(k);
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
     }
     else {          
       gndPos[j] = xymax;          
       gndPos[j+1] = -xymax + (v-1)*ygap;  
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0; 
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
       gndInd.push(k);
     }
     gndPos[j+3] = yColr[0];     
       gndPos[j+4] = yColr[1];     
-      gndPos[j+5] = yColr[2];     
+      gndPos[j+5] = yColr[2];    
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
   }
-  gndNorm = new Float32Array(gndPos);
+  //gndNorm = new Float32Array(gndPos);
 }
 
 function createSphere(){
@@ -1027,7 +1118,7 @@ function initVertexBuffers(gl) {
 
   if (!initArrayBuffer(gl, 'a_Position', new Float32Array(positions), gl.FLOAT, 3)) return -1;
   if (!initArrayBuffer(gl, 'a_Normal', new Float32Array(normals), gl.FLOAT, 3))  return -1;
-  if (!initArrayBuffer(gl, 'a_Color', new Float32Array(colors), gl.FLOAT, 3))  return -1;
+ // if (!initArrayBuffer(gl, 'a_Color', new Float32Array(colors), gl.FLOAT, 3))  return -1;
 
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -1224,13 +1315,22 @@ function keydown(ev, gl, u_ViewMatrix, viewMatrix,u_ProjMatrix, projMatrix, u_Mo
     light0Pos.z += 0.20;
   } else if(ev.keyCode == 79) {//o
     light0Pos.z -= 0.20;
-  } else {
+	}
+	else if(ev.keyCode == 32) {//space 
+	if (lOn == true ){
+    lOn = false;
+	}else{
+	lOn = true;
+	}
+  }
+   else {
     return;
   }
 }
 
 
 function drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix){
+  
   var Ke, Ka, Kd, Ks, Kshiny;
   
   pushMatrix(modelMatrix);
@@ -1387,7 +1487,7 @@ build4();
   
   //chair
   pushMatrix(modelMatrix);
-  
+ /* 
   Ke = new Vector3([0.0, 0.0, 0.0]);
   Ka = new Vector3([0.329412, 0.223529, 0.027451]);
   Kd = new Vector3([0.780392, 0.568627, 0.113725]);
@@ -1398,7 +1498,7 @@ build4();
   modelMatrix.translate(-3.5, 0.0, 0.0);
   
   pushMatrix(modelMatrix);
-  /*modelMatrix.translate(-1.5*Math.sin((30.0+20.0*Math.sin(currentAngle*Math.PI/180))*Math.PI/180), 0.0, 0.05);
+  modelMatrix.translate(-1.5*Math.sin((30.0+20.0*Math.sin(currentAngle*Math.PI/180))*Math.PI/180), 0.0, 0.05);
   
   pushMatrix(modelMatrix);
   modelMatrix.rotate(90.0, 1, 0, 0);
@@ -1470,12 +1570,13 @@ build4();
   modelMatrix = popMatrix();
   
 */
- 
 
 
 }
 
 function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix){
+  
+  
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
   var Ke, Ka, Kd, Ks, Kshiny;
@@ -1483,6 +1584,16 @@ function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMat
   var vpAspect = (gl.drawingBufferWidth)/(gl.drawingBufferHeight);
   
   gl.uniform3f(u_light0Pos, light0Pos.x, light0Pos.y, light0Pos.z);
+  
+  	if (lOn == true){
+    light1Amb = new Vector3([0.15, 0.15, 0.15]);
+    light1Diff = new Vector3([1.0, 1.0, 1.0]);
+    light1Spec = new Vector3([1.0, 1.0, 1.0]);}
+	else{
+	light1Amb = new Vector3([0.0, 0.0, 0.0]);
+    light1Diff = new Vector3([0.0, 0.0, 0.0]);
+    light1Spec = new Vector3([0.0, 0.0, 0.0]);
+	}
   
   light0Amb.x = redA;
   light0Amb.y = greenA;
@@ -1521,13 +1632,20 @@ function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMat
   gl.uniformMatrix4fv(u_ProjMatrix, false, projMatrix.elements);
   gl.uniformMatrix4fv(u_NormalMatrix, false, normalMatrix.elements);
   
-  Ke = new Vector3([1.0, 1.0, 1.0]);
+  /*Ke = new Vector3([1.0, 1.0, 1.0]);
   Ka = new Vector3([0.0, 0.0, 0.0]);
   Kd = new Vector3([0.0, 0.0, 0.0]);
   Ks = new Vector3([0.0, 0.0, 0.0]);
-  Kshiny = 100;
+  Kshiny = 100;*/
+    var matIndex = 12;
+  Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
+  Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
+  Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
+  Ks = new Vector3([Material(matIndex)["specular"][0], Material(matIndex)["specular"][1], Material(matIndex)["specular"][2]]);
+  Kshiny = Material(matIndex)["shiny"];
   setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);
-  gl.drawElements(gl.LINES, gndInd.length, gl.UNSIGNED_SHORT, gndStart);
+  //setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);
+  gl.drawElements(gl.TRIANGLE_STRIP, gndInd.length, gl.UNSIGNED_SHORT, gndStart);
   
   drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix);
   
