@@ -35,7 +35,9 @@ var VSHADER_SOURCE =
   'uniform mat4 u_ProjMatrix;\n' +
   'uniform mat4 u_ModelMatrix; \n' + 		// Model matrix
   'uniform mat4 u_NormalMatrix; \n' +  	// Inverse Transpose of ModelMatrix;
-  'uniform float u_State ; \n' +																			// (won't distort normal vec directions
+  'uniform float u_State ; \n' +
+  'uniform float u_StateA ; \n' +  
+  // (won't distort normal vec directions
   																			// but it usually WILL change its length)
   
 	//-------------VARYING:Vertex Shader values sent per-pixel to Fragment shader:
@@ -46,20 +48,22 @@ var VSHADER_SOURCE =
   'varying vec3 v_Normal; \n' +					// Why Vec3? its not a point, hence w==0
   'varying vec4 v_Color; \n' +
   'varying float v_State; \n' +
+  'varying float v_StateA; \n' +
 	//-----------------------------------------------------------------------------
   'void main() { \n' +
+  	'v_State = u_State;\n' +
+	'v_StateA = u_StateA;\n' +
 		// Compute CVV coordinate values from our given vertex. This 'built-in'
 		// 'varying' value gets interpolated to set screen position for each pixel.
     // Test Zone
+	'  v_Position = u_ModelMatrix * a_Position; \n' +
+		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
+		// gets interpolated (in world coords) for each pixel's fragment shader.
+    'gl_PointSize = 10.0; \n' +
 	'  v_Normal = normalize(vec3(u_NormalMatrix * a_Normal));\n' +
 	'v_Kd = u_MatlSet[0].diff; \n' +
 	'  vec3 normal = normalize(v_Normal); \n' +
     '  vec3 eyeDirection = normalize(u_eyePosWorld - v_Position.xyz); \n' +
-
-//reflectance
-'	float r0 = sqrt(pow(u_LampSet[0].pos.x, 2.0) + pow(u_LampSet[0].pos.y, 2.0) + pow(u_LampSet[0].pos.z, 2.0));\n' +
-'	float att0 = 1.0/(1.0+0.0*r0+0.0*pow(r0, 2.0));\n' +
-
 	'  vec3 lightDirection0 = normalize(u_LampSet[0].pos - v_Position.xyz);\n' +
 	'  vec3 lightDirection1 = normalize(u_LampSet[1].pos - v_Position.xyz);\n' +
 
@@ -74,6 +78,7 @@ var VSHADER_SOURCE =
 	'  float e64_1 = pow(nDotH1, float(u_MatlSet[0].shiny));\n' +
  	// Calculate the final color from diffuse reflection and ambient reflection
 //  '	 vec3 emissive = u_Ke;' +
+  //' if (v_StateA == 0.0){ \n' +
   '	 vec3 emissive = u_MatlSet[0].emit;' +
   '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotL0;\n' +
@@ -82,18 +87,26 @@ var VSHADER_SOURCE =
   '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
   '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+ // '} \n'+
+  ' if (v_StateA == 1.0){ \n' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotH0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotH1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+  '} \n'+
 	
 	// Test Zone
-	'v_State = u_State;\n' +
+
     'v_Color = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1, 1.0); \n'+
   '  gl_Position = gl_Position = u_ProjMatrix * u_ViewMatrix * u_ModelMatrix * a_Position;\n' +
 		// Calculate the vertex position & normal vec in the WORLD coordinate system
 		// for use as a 'varying' variable: fragment shaders get per-pixel values
 		// (interpolated between vertices for our drawing primitive (TRIANGLE)).
-  '  v_Position = u_ModelMatrix * a_Position; \n' +
-		// 3D surface normal of our vertex, in world coords.  ('varying'--its value
-		// gets interpolated (in world coords) for each pixel's fragment shader.
-    'gl_PointSize = 10.0; \n' +
+  
 
 // find per-pixel diffuse reflectance from per-vertex
 													// (no per-pixel Ke,Ka, or Ks, but you can do it...)
@@ -137,7 +150,7 @@ var FSHADER_SOURCE =
   'varying vec4 v_Position;\n' +			// pixel's 3D pos too -- in 'world' coords
   'varying vec3 v_Kd;	\n' +						// Find diffuse reflectance K_d per pix
   'varying float v_State; \n' +// Ambient? Emissive? Specular? almost
-  													// NEVER change per-vertex: I use 'uniform' values
+  'varying float v_StateA; \n' +													// NEVER change per-vertex: I use 'uniform' values
   'varying vec4 v_Color; \n' +
   'void main() { \n' +
      	// Normalize! !!IMPORTANT!! TROUBLE if you don't! 
@@ -159,6 +172,7 @@ var FSHADER_SOURCE =
 	'  float e64_1 = pow(nDotH1, float(u_MatlSet[0].shiny));\n' +
  	// Calculate the final color from diffuse reflection and ambient reflection
 //  '	 vec3 emissive = u_Ke;' +
+  //' if (v_StateA == 0.0){ \n' +
   '	 vec3 emissive = u_MatlSet[0].emit;' +
   '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotL0;\n' +
@@ -167,11 +181,22 @@ var FSHADER_SOURCE =
   '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
   '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotL1;\n' +
   '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
- 'if (v_State == 1.0){ \n'+
+ // '} \n'+
+  ' if (v_StateA == 1.0){ \n' +
+  '	 vec3 emissive = u_MatlSet[0].emit;' +
+  '  vec3 ambient  = u_LampSet[0].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse  = u_LampSet[0].diff * v_Kd * nDotH0;\n' +
+  '	 vec3 speculr  = u_LampSet[0].spec * u_MatlSet[0].spec * e64_0;\n' +
+  '	 vec3 emissive1 = u_MatlSet[0].emit;' +
+  '  vec3 ambient1  = u_LampSet[1].ambi * u_MatlSet[0].ambi;\n' +
+  '  vec3 diffuse1  = u_LampSet[1].diff * v_Kd * nDotH1;\n' +
+  '	 vec3 speculr1  = u_LampSet[1].spec * u_MatlSet[0].spec * e64_1;\n' +
+  '} \n'+
+ 'if (v_State == 0.0){ \n'+
   '  gl_FragColor = vec4(emissive + emissive1  + ambient + ambient1 + diffuse + diffuse1 + speculr + speculr1 , 1.0);\n' +
   '}\n' +
   //'if (v_State == 0.0){ \n'+
-'if (v_State == 0.0){ \n'+
+'if (v_State == 1.0){ \n'+
 ' gl_FragColor = v_Color;\n' +
 '}\n' +
 //'v_Color = vec4(diffuse, a_Color.a);\n'  +
@@ -245,6 +270,28 @@ var aOn = false;
 var dOn = false;
 var sOn = false;
 var lOn = true;
+var state = 1.0;
+var stateA = 1.0;
+
+function setState(x){
+//console.log(x);
+	if (x == 1){
+		state = 1.0;
+	}
+	if (x == 2){
+		state = 0.0;
+	}
+}
+function setStateA(x){
+//console.log(x);
+	if (x == 1){
+		stateA = 1.0;
+	}
+	if (x == 2){
+		stateA = 0.0;
+	}
+}
+
 
 function main()
 {
@@ -279,11 +326,7 @@ function main()
     u_light1Diff = gl.getUniformLocation(gl.program, 'u_LampSet[1].diff');
     u_light1Spec = gl.getUniformLocation(gl.program, 'u_LampSet[1].spec');
     
-    state = gl.getUniformLocation(gl.program, 'u_State');
     
-    gl.uniform1f(state,0.0);
-    
-    console.log(state);
     if( !u_light0Pos || !u_light0Amb || !u_light0Diff || !u_light0Spec
     ||  !u_light1Pos || !u_light1Amb || !u_light1Diff || !u_light1Spec  ) {
       console.log('Failed to get the lights storage locations');
@@ -335,7 +378,12 @@ function main()
   var normalMatrix = new Matrix4();
     
     var tick = function() {
-    
+    u_State = gl.getUniformLocation(gl.program, 'u_State');
+    gl.uniform1f(u_State,state);
+	
+	/*u_StateA = gl.getUniformLocation(gl.program, 'u_StateA');
+    gl.uniform1f(u_StateA,stateA);*/
+	
     currentAngle = animate2(currentAngle);
     currentAngle2 = currentAngle;
     draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix);
@@ -383,6 +431,7 @@ function createGnd() {
 
   gndPos = new Float32Array(3*2*(xcount+ycount));
   gndInd = [];
+  gndNorm =[];
             
   var xgap = xymax/(xcount-1);    
   var ygap = xymax/(ycount-1);    
@@ -392,18 +441,27 @@ function createGnd() {
     if(v%2==0) {  
       gndPos[j] = -xymax + (v  )*xgap;  
       gndPos[j+1] = -xymax;       
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0;  
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
       gndInd.push(k);
     }
     else {        
       gndPos[j] = -xymax + (v-1)*xgap;  
       gndPos[j+1] = xymax;        
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0;  
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
       gndInd.push(k);
     }
     gndPos[j+3] = yColr[0];    
       gndPos[j+4] = yColr[1];    
-      gndPos[j+5] = yColr[2];    
+      gndPos[j+5] = yColr[2]; 
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
   }
   
   for(v=0; v<2*ycount; v++, j+= 3, k++) {
@@ -412,18 +470,27 @@ function createGnd() {
       gndPos[j+1] = -xymax + (v  )*ygap;  
       gndPos[j+2] = 0.0;          
       gndInd.push(k);
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);
     }
     else {          
       gndPos[j] = xymax;          
       gndPos[j+1] = -xymax + (v-1)*ygap;  
-      gndPos[j+2] = 0.0;          
+      gndPos[j+2] = 0.0; 
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
       gndInd.push(k);
     }
     gndPos[j+3] = yColr[0];     
       gndPos[j+4] = yColr[1];     
-      gndPos[j+5] = yColr[2];     
+      gndPos[j+5] = yColr[2];    
+	  gndNorm.push(0);
+	  gndNorm.push(0);
+	  gndNorm.push(1);	  
   }
-  gndNorm = new Float32Array(gndPos);
+  //gndNorm = new Float32Array(gndPos);
 }
 
 function createSphere(){
@@ -1515,6 +1582,8 @@ build4();
 }
 
 function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix){
+  
+  
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
   var Ke, Ka, Kd, Ks, Kshiny;
@@ -1575,7 +1644,7 @@ function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMat
   Kd = new Vector3([0.0, 0.0, 0.0]);
   Ks = new Vector3([0.0, 0.0, 0.0]);
   Kshiny = 100;*/
-    var matIndex = 11;
+    var matIndex = 12;
   Ke = new Vector3([Material(matIndex)["emissive"][0], Material(matIndex)["emissive"][1], Material(matIndex)["emissive"][2]]);
   Ka = new Vector3([Material(matIndex)["ambient"][0], Material(matIndex)["ambient"][1], Material(matIndex)["ambient"][2]]);
   Kd = new Vector3([Material(matIndex)["diffuse"][0], Material(matIndex)["diffuse"][1], Material(matIndex)["diffuse"][2]]);
@@ -1583,7 +1652,7 @@ function draw(gl, u_ViewMatrix, viewMatrix, u_ProjMatrix, projMatrix, u_ModelMat
   Kshiny = Material(matIndex)["shiny"];
   setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);
   //setPhong(gl, Ke, Ka, Kd, Ks, Kshiny);
-  gl.drawElements(gl.LINES, gndInd.length, gl.UNSIGNED_SHORT, gndStart);
+  gl.drawElements(gl.TRIANGLE_STRIP, gndInd.length, gl.UNSIGNED_SHORT, gndStart);
   
   drawMyScene(gl, u_ModelMatrix, modelMatrix, u_NormalMatrix, normalMatrix);
   

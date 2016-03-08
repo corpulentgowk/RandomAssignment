@@ -17,24 +17,31 @@
   <p>User Information  <button type="button" onclick="help()"> Help! </button></p>
   <!--div id='Mouse'> Mouse Drag totals (CVV coords) </div>
   <button type="button" onClick='clearDrag()'>Clear</button-->
+<p><strong>Shading Options:</strong></p>
+  <div style="float:center">
+<form>
+  <input type="radio" name="shading" onclick="setState(1)" value="" checked="checked"> Gouraud Shading
+  <input type="radio" name="shading" onclick="setState(2)"> Phong Shading</input>
+ <form>
+ <br>
+ <form>
+  <input type="radio" name="lighting" onclick="setStateA(1)" value="" checked="checked"> Blinn-Phong Lighting
+  <input type="radio" name="lighting" onclick="setStateA(2)"> Phong Lighting</input>
+ <form>
+</div>
 	<p>Set Ambient/Emissive/Diffuse/Specular States</p>
     <button type="button" onclick="setEmmissive()">Set/Clear Emmissive</button>
 	  <button type="button" onclick="setAmbient()">Set/Clear Ambient</button>
     <button type="button" onclick="setDiffuse()">Set/Clear Diffuse</button>
     <button type="button" onclick="setSpecular()">Set/Clear Specular</button>
 
-  <p>Set RGB</p>
+  <p>Set RGB of Second Light Source: (BLACK ORB BY DEFAULT)</p>
     <label>Red: </label><input id="redIn"></input><br>
     <label>Green: </label> <input id="greenIn"></input><br>
     <label>Blue: </label><input id="blueIn"></input><br>
     <button type="button" onclick="setRGB()">Set RGB</button>
 	<br>
-<div style="float:center">
-<form>
-  <input type="radio" onclick="setState(1)"> Gouraud Shading
-  <input type="radio" onclick="setState(2)"> Phong Shading</input>
- <form>
-</div>
+
   
 
     <script src="../lib/webgl-utils.js"></script>
